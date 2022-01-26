@@ -17,29 +17,34 @@ module mk_fft (R: real): {
 
   def radix = 2i64
 
+  def flat_index_2d [n] 'a (as: [n]a) (offset: i64) (n1: i64) (s1: i64) (n2: i64) (s2: i64) : [n1][n2]a =
+    intrinsics.flat_index_2d(as, offset, n1, s1, n2, s2) :> [n1][n2]a
+
+  def flat_update_2d [n][k][l] 'a (offset: i64) (s1: i64) (s2: i64) (asss: [k][l]a) (as: *[n]a) : *[n]a =
+    intrinsics.flat_update_2d(as, offset, s1, s2, asss)
+
   def fft_iteration [n] (forward: R.t) (ns: i64) (data: [n]complex) (j: i64)
-                  : (i64, complex, i64, complex) =
-    let angle = R.(f64(-2.0) * forward * pi) R.* (R.i64 (j % ns)) R./ R.i64 (ns * radix)
+                  : (complex, complex) =
+    let angle = R.(f64 (-2.0) * forward * pi) R.* R.i64 (j % ns) R./ R.i64 (ns * radix)
     let (v0, v1) = (data[j],
                     data[j + n / radix] complex.* (complex.mk (R.cos angle) (R.sin angle)))
 
-    let (v0, v1) =  (v0 complex.+ v1, v0 complex.- v1)
-    let idxD = ((j / ns) * ns * radix) + (j % ns)
-    in (idxD, v0, idxD + ns, v1)
+    in complex.((v0 + v1, v0 - v1))
 
   def fft' [n] (forward: R.t) (bits: i64) (input: [n]complex) : [n]complex =
     let input = copy input
     let output = copy input
     let ix = iota (n / radix)
-    let NS = map (radix **) (iota bits)
     let (res,_) =
-      loop (input': *[n]complex, output': *[n]complex) = (input, output) for ns in NS do
-        let (i0s, v0s, i1s, v1s) =
-          unzip4 (map (fft_iteration forward ns input') ix)
-        in (scatter output'
-                    (concat_to n i0s i1s)
-                    (v0s ++ v1s :> [n]complex),
-            input')
+      loop (input': *[n]complex, output': *[n]complex) = (input, output) for i0 < bits do
+        let i = radix ** i0
+        let i' = radix ** (i0 + 1)
+        let (v0s, v1s) = unzip <| map (fft_iteration forward i input') ix
+        let v0s = unflatten ((radix ** bits) / i') i v0s
+        let v1s = unflatten ((radix ** bits) / i') i v1s
+        let res = flat_update_2d i i' 1 v1s
+                  (flat_update_2d 0 i' 1 v0s output')
+        in (res, input')
     in res
 
   def log2 (n: i64) : i64 =

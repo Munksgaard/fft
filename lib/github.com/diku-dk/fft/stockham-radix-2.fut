@@ -17,32 +17,27 @@ module mk_fft (R: real): {
 
   def radix = 2i64
 
-  def flat_index_2d [n] 'a (as: [n]a) (offset: i64) (n1: i64) (s1: i64) (n2: i64) (s2: i64) : [n1][n2]a =
-    intrinsics.flat_index_2d(as, offset, n1, s1, n2, s2) :> [n1][n2]a
+  def flat_index_3d [n] 'a (as: [n]a) (offset: i64) (n1: i64) (s1: i64) (n2: i64) (s2: i64) (n3: i64) (s3: i64) : [n1][n2][n3]a =
+    intrinsics.flat_index_3d(as, offset, n1, s1, n2, s2, n3, s3) :> [n1][n2][n3]a
 
-  def flat_update_2d [n][k][l] 'a (offset: i64) (s1: i64) (s2: i64) (asss: [k][l]a) (as: *[n]a) : *[n]a =
-    intrinsics.flat_update_2d(as, offset, s1, s2, asss)
+  def flat_update_3d [n][k][l][p] 'a (as: *[n]a) (offset: i64) (s1: i64) (s2: i64) (s3: i64) (asss: [k][l][p]a) : *[n]a =
+    intrinsics.flat_update_3d(as, offset, s1, s2, s3, asss)
 
-  def fft_iteration [n] (forward: R.t) (ns: i64) (data: [n]complex) (j: i64)
-                  : (complex, complex) =
-    let angle = R.(f64 (-2.0) * forward * pi) R.* R.i64 (j % ns) R./ R.i64 (ns * radix)
-    let (v0, v1) = (data[j],
-                    data[j + n / radix] complex.* (complex.mk (R.cos angle) (R.sin angle)))
-
-    in complex.((v0 + v1, v0 - v1))
+  def fft_iteration (forward: R.t) (ns: i64) (j: i64) (data: [2]complex)
+                   : [2]complex =
+    let angle = R.(f64 (-2.0) * forward * pi) R.* R.i64 j R./ R.i64 (ns * radix)
+    let v0 = data[0]
+    let v1 = data[1] complex.* (complex.mk (R.cos angle) (R.sin angle))
+    in complex.([v0 + v1, v0 - v1])
 
   def fft' [n] (forward: R.t) (bits: i64) (input: [n]complex) : [n]complex =
-    let ix = iota (n / radix)
     let res =
       loop input = copy input for i0 < bits do
         let i = radix ** i0
         let i' = radix ** (i0 + 1)
-        let (v0s, v1s) = unzip <| map (fft_iteration forward i input) ix
-        let v0s = unflatten ((radix ** bits) / i') i v0s
-        let v1s = unflatten ((radix ** bits) / i') i v1s
-        let res = flat_update_2d i i' 1 v1s
-                  (flat_update_2d 0 i' 1 v0s input)
-        in res
+        let projected = flat_index_3d input 0 ((radix ** bits) / i') i i 1 2 (n / radix)
+        let results = map (map2 (fft_iteration forward i) (iota i)) projected
+        in flat_update_3d input 0 i' 1 i results
     in res
 
   def log2 (n: i64) : i64 =

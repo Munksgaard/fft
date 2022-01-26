@@ -32,19 +32,17 @@ module mk_fft (R: real): {
     in complex.((v0 + v1, v0 - v1))
 
   def fft' [n] (forward: R.t) (bits: i64) (input: [n]complex) : [n]complex =
-    let input = copy input
-    let output = copy input
     let ix = iota (n / radix)
-    let (res,_) =
-      loop (input': *[n]complex, output': *[n]complex) = (input, output) for i0 < bits do
+    let res =
+      loop input = copy input for i0 < bits do
         let i = radix ** i0
         let i' = radix ** (i0 + 1)
-        let (v0s, v1s) = unzip <| map (fft_iteration forward i input') ix
+        let (v0s, v1s) = unzip <| map (fft_iteration forward i input) ix
         let v0s = unflatten ((radix ** bits) / i') i v0s
         let v1s = unflatten ((radix ** bits) / i') i v1s
         let res = flat_update_2d i i' 1 v1s
-                  (flat_update_2d 0 i' 1 v0s output')
-        in (res, input')
+                  (flat_update_2d 0 i' 1 v0s input)
+        in res
     in res
 
   def log2 (n: i64) : i64 =

@@ -31,14 +31,14 @@ module mk_fft (R: real): {
     in complex.([v0 + v1, v0 - v1])
 
   def fft' [n] (forward: R.t) (bits: i64) (input: [n]complex) : [n]complex =
-    let res =
-      loop input = copy input for i0 < bits do
+    let (res, _) =
+      loop (input, output) = (copy input, copy input) for i0 < bits do
         let i = radix ** i0
         let i' = radix ** (i0 + 1)
         let projected = flat_index_3d input 0 ((radix ** bits) / i') i i 1 2 (n / radix)
         let results = map (map2 (fft_iteration forward i) (iota i)) projected
-        in flat_update_3d input 0 i' 1 i results
-    in res
+        in (flat_update_3d output 0 i' 1 i results, input)
+    in res :> [n]complex
 
   def log2 (n: i64) : i64 =
     let r = 0
